@@ -1,243 +1,228 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Plus, Trash2, ArrowLeft, GitBranch } from 'lucide-react';
+import Card from './ui/Card';
+import Button from './ui/Button';
+import Input from './ui/Input';
 import { usePoll } from '../context/PollContext';
-import { Plus, Trash2, Code, Eye } from 'lucide-react';
-import CodeEditor from './CodeEditor';
+import { useWalletContext } from '../context/WalletContext';
 
 function PollCreator() {
   const navigate = useNavigate();
   const { createPoll } = usePoll();
+  const { connected, connectWallet } = useWalletContext();
   
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [gitRepo, setGitRepo] = useState('');
-  const [showCodePreview, setShowCodePreview] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
 
+  // Add a new option
   const addOption = () => {
-    setOptions([...options, '']);
-  };
-
-  const removeOption = (index) => {
-    if (options.length > 2) {
-      setOptions(options.filter((_, i) => i !== index));
+    if (options.length < 10) {
+      setOptions([...options, '']);
     }
   };
 
+  // Remove an option
+  const removeOption = (index) => {
+    if (options.length > 2) {
+      const newOptions = [...options];
+      newOptions.splice(index, 1);
+      setOptions(newOptions);
+    }
+  };
+
+  // Update an option
   const updateOption = (index, value) => {
     const newOptions = [...options];
     newOptions[index] = value;
     setOptions(newOptions);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  // Validate form
+  const validateForm = () => {
+    const newErrors = {};
     
-    if (!question.trim() || options.some(opt => !opt.trim())) {
-      alert('Please fill in all fields');
-      return;
+    if (!question.trim()) {
+      newErrors.question = 'Question is required';
     }
-
-    const poll = createPoll({
-      question: question.trim(),
-      options: options.filter(opt => opt.trim()),
-      gitRepo: gitRepo.trim(),
-      creatorAddress: 'demo-address', // In real app, get from wallet
-    });
-
-    navigate(`/deploy/${poll.id}`);
+    
+    const validOptions = options.filter(option => option.trim());
+    if (validOptions.length < 2) {
+      newErrors.options = 'At least 2 options are required';
+    }
+    
+    // Check for duplicate options
+    const uniqueOptions = new Set(options.map(opt => opt.trim()));
+    if (uniqueOptions.size !== validOptions.length) {
+      newErrors.options = 'Options must be unique';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const generateAnchorCode = () => {
-    return `use anchor_lang::prelude::*;
-
-declare_id!("${Math.random().toString(36).substring(7)}");
-
-#[program]
-pub mod poll_vote {
-    use super::*;
-
-    pub fn initialize_poll(
-        ctx: Context<InitializePoll>,
-        question: String,
-        options: Vec<String>,
-    ) -> Result<()> {
-        let poll = &mut ctx.accounts.poll;
-        poll.question = question;
-        poll.options = options;
-        poll.creator = ctx.accounts.creator.key();
-        poll.votes = vec![0; poll.options.len()];
-        poll.total_votes = 0;
-        Ok(())
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!connected) {
+      await connectWallet();
+      return;
     }
-
-    pub fn vote(ctx: Context<Vote>, option_index: u8) -> Result<()> {
-        let poll = &mut ctx.accounts.poll;
-        require!(
-            (option_index as usize) < poll.options.len(),
-            PollError::InvalidOption
-        );
-        
-        poll.votes[option_index as usize] += 1;
-        poll.total_votes += 1;
-        Ok(())
+    
+    if (!validateForm()) {
+      return;
     }
-}
-
-#[derive(Accounts)]
-pub struct InitializePoll<'info> {
-    #[account(
-        init,
-        payer = creator,
-        space = 8 + 32 + 200 + 4 + (32 * 10) + 4 + (8 * 10) + 8
-    )]
-    pub poll: Account<'info, Poll>,
-    #[account(mut)]
-    pub creator: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct Vote<'info> {
-    #[account(mut)]
-    pub poll: Account<'info, Poll>,
-    pub voter: Signer<'info>,
-}
-
-#[account]
-pub struct Poll {
-    pub question: String,
-    pub options: Vec<String>,
-    pub creator: Pubkey,
-    pub votes: Vec<u64>,
-    pub total_votes: u64,
-}
-
-#[error_code]
-pub enum PollError {
-    #[msg("Invalid option selected")]
-    InvalidOption,
-}`;
+    
+    try {
+      setLoading(true);
+      
+      // Filter out empty options
+      const validOptions = options.filter(option => option.trim());
+      
+      // Create poll
+      const poll = createPoll({
+        question: question.trim(),
+        options: validOptions,
+        gitRepo: gitRepo.trim() || null,
+      });
+      
+      // Navigate to deployment page
+      navigate(`/deploy/${poll.id}`);
+    } catch (error) {
+      console.error('Error creating poll:', error);
+      setErrors({ submit: 'Failed to create poll. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Create New Poll dApp</h1>
-        <p className="text-gray-300">Define your poll and we'll generate the Anchor program and React UI</p>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* Form Section */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 p-6">
+    <div className="max-w-2xl mx-auto">
+      <Button
+        variant="ghost"
+        onClick={() => navigate('/')}
+        className="mb-6"
+        icon={<ArrowLeft className="w-4 h-4" />}
+      >
+        Back to Dashboard
+      </Button>
+      
+      <Card>
+        <Card.Header>
+          <h2 className="text-2xl font-bold text-white">Create a New Poll</h2>
+          <p className="text-gray-300">
+            Design your poll with a question and multiple options
+          </p>
+        </Card.Header>
+        
+        <Card.Content>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Poll Question *
-              </label>
-              <input
-                type="text"
+              <Input
+                id="question"
+                label="Poll Question"
+                placeholder="What would you like to ask?"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                placeholder="What's your favorite programming language?"
-                className="input bg-white/5 border-white/20 text-white placeholder-gray-400"
+                error={errors.question}
+                fullWidth
                 required
               />
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Options *
+            
+            <div className="space-y-4">
+              <label className="block text-sm font-medium text-white">
+                Poll Options <span className="text-red-400">*</span>
               </label>
-              <div className="space-y-2">
-                {options.map((option, index) => (
-                  <div key={index} className="flex space-x-2">
-                    <input
-                      type="text"
-                      value={option}
-                      onChange={(e) => updateOption(index, e.target.value)}
-                      placeholder={`Option ${index + 1}`}
-                      className="flex-1 input bg-white/5 border-white/20 text-white placeholder-gray-400"
-                      required
-                    />
-                    {options.length > 2 && (
-                      <button
-                        type="button"
-                        onClick={() => removeOption(index)}
-                        className="p-2 text-red-400 hover:text-red-300 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={addOption}
-                className="mt-2 flex items-center text-sm text-purple-400 hover:text-purple-300 transition-colors"
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Add Option
-              </button>
+              
+              {options.map((option, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    placeholder={`Option ${index + 1}`}
+                    value={option}
+                    onChange={(e) => updateOption(index, e.target.value)}
+                    fullWidth
+                  />
+                  {options.length > 2 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => removeOption(index)}
+                      className="text-red-400 hover:text-red-300"
+                      aria-label="Remove option"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              
+              {errors.options && (
+                <p className="text-xs text-red-400">{errors.options}</p>
+              )}
+              
+              {options.length < 10 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addOption}
+                  icon={<Plus className="w-4 h-4" />}
+                  fullWidth
+                >
+                  Add Option
+                </Button>
+              )}
             </div>
-
+            
             <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Git Repository (Optional)
-              </label>
-              <input
-                type="url"
+              <Input
+                id="gitRepo"
+                label="Git Repository URL (Optional)"
+                placeholder="https://github.com/username/repo"
                 value={gitRepo}
                 onChange={(e) => setGitRepo(e.target.value)}
-                placeholder="https://github.com/username/repo"
-                className="input bg-white/5 border-white/20 text-white placeholder-gray-400"
+                fullWidth
+                icon={<GitBranch className="w-4 h-4 text-gray-400" />}
+                helperText="Link your source code repository for better verification"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Link to your source code for verification
-              </p>
             </div>
-
-            <div className="flex space-x-3">
-              <button
-                type="submit"
-                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300"
-              >
-                Generate & Deploy
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCodePreview(!showCodePreview)}
-                className="px-6 py-3 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 transition-colors flex items-center"
-              >
-                <Code className="w-4 h-4 mr-2" />
-                {showCodePreview ? 'Hide' : 'Preview'} Code
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* Code Preview Section */}
-        <div className={`${showCodePreview ? 'block' : 'hidden lg:block'} bg-gray-900 rounded-lg overflow-hidden border border-gray-700`}>
-          <div className="bg-gray-800 px-4 py-2 border-b border-gray-700">
-            <div className="flex items-center space-x-2">
-              <div className="flex space-x-1">
-                <div className="w-3 h-3 bg-red-400 rounded-full"></div>
-                <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
-                <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+            
+            {errors.submit && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                <p className="text-sm text-red-400">{errors.submit}</p>
               </div>
-              <span className="text-gray-300 text-sm">lib.rs</span>
-            </div>
+            )}
+          </form>
+        </Card.Content>
+        
+        <Card.Footer>
+          <div className="flex flex-col sm:flex-row gap-3 w-full">
+            <Button
+              variant="outline"
+              onClick={() => navigate('/')}
+              className="sm:flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              onClick={handleSubmit}
+              loading={loading}
+              disabled={loading}
+              className="sm:flex-1"
+            >
+              {connected ? 'Create Poll' : 'Connect Wallet'}
+            </Button>
           </div>
-          <CodeEditor 
-            code={generateAnchorCode()}
-            language="rust"
-            readOnly={true}
-            height="500px"
-          />
-        </div>
-      </div>
+        </Card.Footer>
+      </Card>
     </div>
   );
 }
 
 export default PollCreator;
+

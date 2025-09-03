@@ -1,0 +1,21 @@
+[package]
+name = "verify-vote"
+version = "0.1.0"
+description = "Solana program for creating and managing verified polls"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "verify_vote"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.28.0"
+solana-program = "1.16.0"
+

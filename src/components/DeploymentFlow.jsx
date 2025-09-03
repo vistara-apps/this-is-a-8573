@@ -1,211 +1,237 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Check, Loader2, DollarSign, Shield, Code, Server, Database } from 'lucide-react';
+import Card from './ui/Card';
+import Button from './ui/Button';
 import { usePoll } from '../context/PollContext';
+import { useWalletContext } from '../context/WalletContext';
 import { usePaymentContext } from '../hooks/usePaymentContext';
-import { Check, Clock, DollarSign, ExternalLink, Code, Package } from 'lucide-react';
+import PaymentModal from './PaymentModal';
 
 function DeploymentFlow() {
   const { pollId } = useParams();
   const navigate = useNavigate();
-  const { getPoll, updatePoll } = usePoll();
-  const { createSession } = usePaymentContext();
+  const { getPoll, deployPoll } = usePoll();
+  const { connected, connectWallet } = useWalletContext();
+  const { formatPrice, getPriceForAction } = usePaymentContext();
   
   const [poll, setPoll] = useState(null);
-  const [paymentCompleted, setPaymentCompleted] = useState(false);
-  const [deploymentStep, setDeploymentStep] = useState(0);
-  const [deploymentError, setDeploymentError] = useState(null);
-
-  const deploymentSteps = [
-    { name: 'Payment Processing', icon: DollarSign },
-    { name: 'Generating Anchor Program', icon: Code },
-    { name: 'Compiling Smart Contract', icon: Package },
-    { name: 'Deploying to Solana Devnet', icon: ExternalLink },
-    { name: 'Generating Metadata', icon: Check },
-    { name: 'Pinning to IPFS', icon: Check },
+  const [currentStep, setCurrentStep] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  
+  // Steps in the deployment process
+  const steps = [
+    { id: 'prepare', title: 'Prepare Code', icon: <Code className="w-5 h-5" /> },
+    { id: 'compile', title: 'Compile Program', icon: <Server className="w-5 h-5" /> },
+    { id: 'deploy', title: 'Deploy to Solana', icon: <Database className="w-5 h-5" /> },
+    { id: 'verify', title: 'Verify Deployment', icon: <Shield className="w-5 h-5" /> },
   ];
 
+  // Load poll data
   useEffect(() => {
-    const foundPoll = getPoll(pollId);
-    if (!foundPoll) {
-      navigate('/');
+    const loadPoll = () => {
+      const pollData = getPoll(pollId);
+      if (pollData) {
+        setPoll(pollData);
+      } else {
+        setError('Poll not found');
+      }
+    };
+
+    loadPoll();
+  }, [pollId, getPoll]);
+
+  // Handle deployment
+  const handleDeploy = async () => {
+    if (!connected) {
+      await connectWallet();
       return;
     }
-    setPoll(foundPoll);
-  }, [pollId, getPoll, navigate]);
-
-  const handlePayment = async () => {
+    
     try {
-      await createSession('$0.005'); // $5 deployment fee
-      setPaymentCompleted(true);
-      startDeployment();
-    } catch (error) {
-      console.error('Payment failed:', error);
-      setDeploymentError('Payment failed. Please try again.');
+      setLoading(true);
+      setError(null);
+      
+      // Show payment modal
+      setShowPaymentModal(true);
+    } catch (err) {
+      console.error('Error starting deployment:', err);
+      setError('Failed to start deployment. Please try again.');
+      setLoading(false);
     }
   };
 
-  const startDeployment = async () => {
-    // Simulate deployment process
-    for (let i = 0; i < deploymentSteps.length; i++) {
-      setDeploymentStep(i);
-      await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay per step
+  // Handle payment completion
+  const handlePaymentComplete = async (paymentResponse) => {
+    try {
+      // Close payment modal
+      setShowPaymentModal(false);
+      
+      // Start deployment process
+      await runDeploymentSteps();
+    } catch (err) {
+      console.error('Error during deployment:', err);
+      setError('Deployment failed. Please try again.');
+      setLoading(false);
     }
+  };
 
-    // Update poll with deployment data
-    const deploymentData = {
-      status: 'deployed',
-      programId: `program_${Math.random().toString(36).substring(7)}`,
-      metadataHash: `metadata_${Math.random().toString(36).substring(7)}`,
-      deployedAt: new Date(),
-    };
-
-    updatePoll(pollId, deploymentData);
-    setPoll(prev => ({ ...prev, ...deploymentData }));
-    setDeploymentStep(deploymentSteps.length);
+  // Run through deployment steps
+  const runDeploymentSteps = async () => {
+    try {
+      // Step 1: Prepare code
+      setCurrentStep(0);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Step 2: Compile program
+      setCurrentStep(1);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Step 3: Deploy to Solana
+      setCurrentStep(2);
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      
+      // Step 4: Verify deployment
+      setCurrentStep(3);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Complete deployment
+      const deploymentResult = await deployPoll(pollId);
+      
+      // Navigate to poll view
+      navigate(`/poll/${pollId}`);
+    } catch (err) {
+      console.error('Error during deployment:', err);
+      setError('Deployment failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!poll) {
-    return <div className="text-white">Loading...</div>;
+    return (
+      <div className="flex justify-center py-12">
+        <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Deploy Poll dApp</h1>
-        <p className="text-gray-300">
-          Deploy "{poll.question}" to Solana Devnet with verified metadata
-        </p>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* Deployment Progress */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 p-6">
-          <h2 className="text-xl font-semibold text-white mb-6">Deployment Progress</h2>
-
-          {!paymentCompleted ? (
-            <div className="space-y-6">
-              <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                <h3 className="text-lg font-semibold text-white mb-2">Deployment Fee</h3>
-                <p className="text-gray-300 mb-4">
-                  Initial deployment: <span className="text-green-400 font-semibold">$5</span>
-                </p>
-                <ul className="text-sm text-gray-300 space-y-1 mb-6">
-                  <li>• Anchor program generation & compilation</li>
-                  <li>• Solana Devnet deployment</li>
-                  <li>• IPFS metadata pinning</li>
-                  <li>• Verifiable build artifacts</li>
-                </ul>
-                <button
-                  onClick={handlePayment}
-                  className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300"
-                >
-                  Pay $5 & Deploy
-                </button>
-              </div>
-              
-              {deploymentError && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-                  <p className="text-red-400">{deploymentError}</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {deploymentSteps.map((step, index) => {
-                const isCompleted = index < deploymentStep;
-                const isCurrent = index === deploymentStep;
-                const isPending = index > deploymentStep;
-
-                return (
-                  <div key={index} className="flex items-center space-x-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      isCompleted 
-                        ? 'bg-green-500' 
-                        : isCurrent 
-                        ? 'bg-purple-500 animate-pulse' 
-                        : 'bg-gray-600'
-                    }`}>
-                      {isCompleted ? (
-                        <Check className="w-4 h-4 text-white" />
-                      ) : isCurrent ? (
-                        <Clock className="w-4 h-4 text-white animate-spin" />
-                      ) : (
-                        <step.icon className="w-4 h-4 text-gray-400" />
-                      )}
-                    </div>
-                    <span className={`${
-                      isCompleted 
-                        ? 'text-green-400' 
-                        : isCurrent 
-                        ? 'text-white' 
-                        : 'text-gray-400'
-                    }`}>
-                      {step.name}
-                    </span>
-                  </div>
-                );
-              })}
-
-              {deploymentStep >= deploymentSteps.length && (
-                <div className="mt-6 space-y-4">
-                  <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
-                    <h3 className="text-green-400 font-semibold mb-2">Deployment Successful!</h3>
-                    <p className="text-gray-300 text-sm">
-                      Your poll dApp has been deployed and verified on Solana Devnet
-                    </p>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => navigate(`/poll/${pollId}`)}
-                      className="btn-primary"
-                    >
-                      View dApp
-                    </button>
-                    <button
-                      onClick={() => navigate('/')}
-                      className="btn-secondary"
-                    >
-                      Dashboard
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Poll Preview */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 p-6">
-          <h2 className="text-xl font-semibold text-white mb-6">Poll Preview</h2>
-          
-          <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-            <h3 className="text-lg font-semibold text-white mb-4">{poll.question}</h3>
-            
-            <div className="space-y-3">
+    <div className="max-w-2xl mx-auto">
+      <Button
+        variant="ghost"
+        onClick={() => navigate('/')}
+        className="mb-6"
+        icon={<ArrowLeft className="w-4 h-4" />}
+      >
+        Back to Dashboard
+      </Button>
+      
+      <Card>
+        <Card.Header>
+          <h2 className="text-2xl font-bold text-white">Deploy Your Poll</h2>
+          <p className="text-gray-300">
+            Deploy your poll to the Solana blockchain with verified code
+          </p>
+        </Card.Header>
+        
+        <Card.Content>
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-white mb-2">{poll.question}</h3>
+            <div className="space-y-2">
               {poll.options.map((option, index) => (
-                <button
-                  key={index}
-                  className="w-full text-left p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors text-gray-300"
-                  disabled
-                >
-                  {option}
-                </button>
+                <div key={index} className="flex items-center">
+                  <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center mr-2 text-xs">
+                    {index + 1}
+                  </div>
+                  <span className="text-gray-300">{option}</span>
+                </div>
               ))}
             </div>
-
-            <div className="mt-6 pt-4 border-t border-white/10">
-              <div className="text-sm text-gray-400 space-y-1">
-                <p>Creator: {poll.creatorAddress}</p>
-                {poll.programId && <p>Program ID: {poll.programId}</p>}
-                {poll.metadataHash && <p>Metadata: {poll.metadataHash}</p>}
-              </div>
+          </div>
+          
+          <div className="border border-white/10 rounded-lg p-4 mb-6">
+            <h4 className="text-sm font-medium text-white mb-3">Deployment Steps</h4>
+            <div className="space-y-4">
+              {steps.map((step, index) => (
+                <div key={step.id} className="flex items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                    index < currentStep
+                      ? 'bg-green-500 text-white'
+                      : index === currentStep && loading
+                      ? 'bg-purple-500 text-white'
+                      : 'bg-white/10 text-gray-400'
+                  }`}>
+                    {index < currentStep ? (
+                      <Check className="w-4 h-4" />
+                    ) : index === currentStep && loading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      step.icon
+                    )}
+                  </div>
+                  <span className={`${
+                    index < currentStep
+                      ? 'text-green-400'
+                      : index === currentStep && loading
+                      ? 'text-white'
+                      : 'text-gray-400'
+                  }`}>
+                    {step.title}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-      </div>
+          
+          <div className="bg-white/5 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-gray-300">Deployment Fee</span>
+              <span className="text-white font-medium">
+                {formatPrice(getPriceForAction('initialDeployment'))}
+              </span>
+            </div>
+            <p className="text-xs text-gray-400">
+              This one-time fee covers the cost of deploying your poll to the Solana blockchain and generating verifiable metadata.
+            </p>
+          </div>
+          
+          {error && (
+            <div className="mt-4 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+              <p className="text-sm text-red-400">{error}</p>
+            </div>
+          )}
+        </Card.Content>
+        
+        <Card.Footer>
+          <Button
+            onClick={handleDeploy}
+            loading={loading}
+            disabled={loading}
+            fullWidth
+            icon={<DollarSign className="w-4 h-4" />}
+          >
+            {connected
+              ? loading
+                ? 'Deploying...'
+                : `Pay ${formatPrice(getPriceForAction('initialDeployment'))} & Deploy`
+              : 'Connect Wallet to Deploy'}
+          </Button>
+        </Card.Footer>
+      </Card>
+      
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        amount={formatPrice(getPriceForAction('initialDeployment'))}
+        description="Deploy poll to Solana blockchain with verified code"
+        onPaymentComplete={handlePaymentComplete}
+      />
     </div>
   );
 }
 
 export default DeploymentFlow;
+
