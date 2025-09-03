@@ -1,49 +1,109 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { Code, Vote, Zap } from 'lucide-react';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Menu, X, Vote } from 'lucide-react';
+import WalletConnectButton from './WalletConnectButton';
 
 function Header() {
-  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const toggleMobileMenu = () => {
+    setMobileMenuOpen(!mobileMenuOpen);
+  };
 
   return (
-    <header className="bg-black/20 backdrop-blur-sm border-b border-white/10">
-      <div className="container mx-auto px-4 py-4 max-w-7xl">
-        <div className="flex items-center justify-between">
-          <Link to="/" className="flex items-center space-x-2">
-            <div className="bg-gradient-to-r from-purple-400 to-pink-400 p-2 rounded-lg">
-              <Vote className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">VerifyVote</h1>
-              <p className="text-sm text-gray-300">Deploy verified Solana poll dApps</p>
-            </div>
-          </Link>
+    <header className="border-b border-white/10 bg-black/20 backdrop-blur-lg sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+          {/* Logo and desktop navigation */}
+          <div className="flex items-center">
+            <Link to="/" className="flex items-center">
+              <Vote className="h-8 w-8 text-purple-500" />
+              <span className="ml-2 text-xl font-bold text-white">VerifyVote</span>
+            </Link>
+            
+            <nav className="hidden md:ml-10 md:flex md:space-x-8">
+              <Link
+                to="/"
+                className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+              >
+                Dashboard
+              </Link>
+              <Link
+                to="/create"
+                className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+              >
+                Create Poll
+              </Link>
+              <a
+                href="https://docs.verifyvote.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-colors"
+              >
+                Documentation
+              </a>
+            </nav>
+          </div>
 
-          <nav className="hidden md:flex items-center space-x-6">
-            <Link 
-              to="/" 
-              className={`text-sm font-medium transition-colors ${
-                location.pathname === '/' ? 'text-white' : 'text-gray-300 hover:text-white'
-              }`}
+          {/* Wallet connect button */}
+          <div className="hidden md:flex items-center">
+            <WalletConnectButton />
+          </div>
+
+          {/* Mobile menu button */}
+          <div className="md:hidden flex items-center">
+            <button
+              onClick={toggleMobileMenu}
+              className="text-gray-400 hover:text-white focus:outline-none"
+            >
+              {mobileMenuOpen ? (
+                <X className="h-6 w-6" />
+              ) : (
+                <Menu className="h-6 w-6" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-gray-900/95 backdrop-blur-lg">
+          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+            <Link
+              to="/"
+              className="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+              onClick={() => setMobileMenuOpen(false)}
             >
               Dashboard
             </Link>
-            <Link 
-              to="/create" 
-              className={`text-sm font-medium transition-colors ${
-                location.pathname === '/create' ? 'text-white' : 'text-gray-300 hover:text-white'
-              }`}
+            <Link
+              to="/create"
+              className="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+              onClick={() => setMobileMenuOpen(false)}
             >
               Create Poll
             </Link>
-          </nav>
-
-          <ConnectButton />
+            <a
+              href="https://docs.verifyvote.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Documentation
+            </a>
+          </div>
+          <div className="pt-4 pb-3 border-t border-gray-700">
+            <div className="px-3 py-3">
+              <WalletConnectButton />
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </header>
   );
 }
 
 export default Header;
+
