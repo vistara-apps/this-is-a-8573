@@ -1,3 +1,5 @@
+const webpack = require('webpack');
+
 module.exports = {
   webpack: {
     configure: {
@@ -15,9 +17,17 @@ module.exports = {
           "assert": require.resolve("assert/"),
           "url": require.resolve("url/"),
           "util": require.resolve("util/"),
+          "process": require.resolve("process/browser"),
         },
       },
     },
+    plugins: {
+      add: [
+        new webpack.ProvidePlugin({
+          process: 'process/browser',
+          Buffer: ['buffer', 'Buffer'],
+        }),
+      ],
+    },
   },
 };
-
